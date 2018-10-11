@@ -8,6 +8,8 @@
 #define Add2Ptr(P,I) ((PVOID)((PUCHAR)(P) + (I)))
 
 ULONG g_RefCount = 0;
+BOOL block = false;
+PCSTR driverToFail;
 
 class EventCallbacks : public DebugBaseEventCallbacks
 {
@@ -27,12 +29,6 @@ public:
     STDMETHOD(GetInterestMask)(
         THIS_
         OUT PULONG Mask
-        );
-
-    STDMETHOD(Exception)(
-        THIS_
-        IN PEXCEPTION_RECORD64 Exception,
-        IN ULONG FirstChance
         );
 
     STDMETHOD(LoadModule)(
@@ -70,18 +66,8 @@ EventCallbacks::GetInterestMask(
     THIS_
     OUT PULONG Mask)
 {
-    *Mask = DEBUG_EVENT_EXCEPTION | DEBUG_EVENT_LOAD_MODULE;
+    *Mask = DEBUG_EVENT_LOAD_MODULE;
     return S_OK;
-}
-
-STDMETHODIMP
-EventCallbacks::Exception(
-    THIS_
-    IN PEXCEPTION_RECORD64 Exception,
-    IN ULONG FirstChance)
-{
-    DEBUGPRINT("Exception!\n");
-    return DEBUG_STATUS_NO_CHANGE;
 }
 
 STDMETHODIMP EventCallbacks::LoadModule(
@@ -97,7 +83,11 @@ STDMETHODIMP EventCallbacks::LoadModule(
 {
     DEBUGPRINT("Load module %s\n", ImageName);
 
-    if (!_stricmp(ImageName, "hevd.sys")) {
+    if (!block || driverToFail == nullptr) {
+        return DEBUG_STATUS_NO_CHANGE;
+    }
+
+    if (!_stricmp(ImageName, driverToFail)) {
         // Fail driver load
         auto pDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(BaseOffset);
 
@@ -149,54 +139,48 @@ CSimpleOptA::SOption g_pp_opts[] = {
     SO_END_OF_OPTIONS
 };
 
-void Usage_CmdPoolPage(PCMD_CTX ctx)
-{
-    OutputDml(ctx, "<b>!S1Dbg</b>"); dprintf(" [options] address\n");
-    dprintf(
-        "  options:\n"
-        "    -r, --raw              display the raw POOL_HEADER structures\n"
-    );
-}
-
-HRESULT CALLBACK s1dbg(PDEBUG_CLIENT4 pClient, PCSTR args)
+HRESULT CALLBACK fail(PDEBUG_CLIENT4 pClient, PCSTR args)
 {
     HRESULT ret = S_OK;
 
     char **argv = NULL;
     int argc;
     CMD_CTX ctx;
+    CSimpleOptA cs;
 
     // initialize the command context
     if (FAILED(ret = InitCmdCtx(&ctx, pClient)))
         return ret;
 
-    argv = MakeCmdline("!s1dbg", args, &argc);
+    argv = MakeCmdline("!fail", args, &argc);
     if (argv == NULL)
     {
         ret = E_OUTOFMEMORY;
         goto cleanup;
     }
+
+    if (argc != 2) {
+        OutputDml(&ctx, "Usage: !fail drivername.sys");
+        goto cleanup;
+    }
+
+    if (*args && (!_stricmp(args, "clean") || !_stricmp(args, "disable"))) {
+        block = false;
+        driverToFail = nullptr;
+    }
+    else if (*args) {
+        block = true;
+        driverToFail = args;
+    }
        
-    dprintf(" Hello!\n");
+    dprintf("Will prevent driver %s from loading \n", driverToFail);
     
 cleanup:
+    if (argv != NULL)
+        free(argv);
+
+    ReleaseCmdCtx(&ctx);
     return ret;
-}
-
-
-void ShowBanner(PCMD_CTX ctx)
-{
-    OutputDml(ctx,
-        "<b>\n"
-        "                    _ _        __       \n"
-        "  _ __   ___   ___ | (_)_ __  / _| ___  \n"
-        " | '_ \\ / _ \\ / _ \\| | | '_ \\| |_ / _ \\ \n"
-        " | |_) | (_) | (_) | | | | | |  _| (_) |\n"
-        " | .__/ \\___/ \\___/|_|_|_| |_|_|  \\___/ \n"
-        " |_|                                    \n"
-        "</b>        by: jfisher @debugregister\n"
-        "\n"
-        );
 }
 
 // The entry point for the extension
