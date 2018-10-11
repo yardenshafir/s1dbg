@@ -1,0 +1,6 @@
+LIBRARY	"s1dbg"
+VERSION 0.1
+EXPORTS
+    DebugExtensionInitialize PRIVATE
+    DebugExtensionUninitialize PRIVATE
+    s1dbg
