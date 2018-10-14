@@ -10,6 +10,7 @@
 ULONG g_RefCount = 0;
 BOOL block = false;
 PCSTR driverToFail;
+PDEBUG_CLIENT4 gDebugClient;
 
 class EventCallbacks : public DebugBaseEventCallbacks
 {
@@ -171,9 +172,9 @@ HRESULT CALLBACK fail(PDEBUG_CLIENT4 pClient, PCSTR args)
     else if (*args) {
         block = true;
         driverToFail = args;
+        OutputDml(&ctx, "Will prevent driver %s from loading \n", driverToFail);
     }
-       
-    dprintf("Will prevent driver %s from loading \n", driverToFail);
+    
     
 cleanup:
     if (argv != NULL)
@@ -201,6 +202,8 @@ extern "C" HRESULT CALLBACK DebugExtensionInitialize(PULONG Version, PULONG Flag
         return ret;
 
     ExtensionApis.nSize = sizeof(ExtensionApis);
+
+    gDebugClient = pDebugClient;
     //pDebugControl->GetWindbgExtensionApis32((PWINDBG_EXTENSION_APIS32) &ExtensionApis);
     pDebugControl->GetWindbgExtensionApis64((PWINDBG_EXTENSION_APIS64) &ExtensionApis);
     pDebugControl->Release();
@@ -236,6 +239,7 @@ extern "C" HRESULT CALLBACK DebugExtensionInitialize(PULONG Version, PULONG Flag
 
 extern "C" HRESULT CALLBACK DebugExtensionUninitialize(void)
 {
+    gDebugClient->Release();
     DEBUGPRINT("DebugExtensionUninitialize\n");
     return S_OK;
 }
