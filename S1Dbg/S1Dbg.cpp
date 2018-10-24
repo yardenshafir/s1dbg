@@ -4,12 +4,13 @@
 #include "S1Dbg.h"
 #include "context.h"
 #include "util.h"
+#include <string>
 
 #define Add2Ptr(P,I) ((PVOID)((PUCHAR)(P) + (I)))
 
 ULONG g_RefCount = 0;
 BOOL block = false;
-PCSTR driverToFail;
+std::string driverToFail;
 PDEBUG_CLIENT4 gDebugClient;
 
 class EventCallbacks : public DebugBaseEventCallbacks
@@ -84,11 +85,11 @@ STDMETHODIMP EventCallbacks::LoadModule(
 {
     DEBUGPRINT("Load module %s\n", ImageName);
 
-    if (!block || driverToFail == nullptr) {
+    if (!block || driverToFail.empty()) {
         return DEBUG_STATUS_NO_CHANGE;
     }
 
-    if (!_stricmp(ImageName, driverToFail)) {
+    if (!_stricmp(ImageName, driverToFail.c_str())) {
         // Fail driver load
         auto pDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(BaseOffset);
 
@@ -113,7 +114,7 @@ STDMETHODIMP EventCallbacks::LoadModule(
         };
 
         ExtensionApis.lpWriteProcessMemoryRoutine((ULONG64)pEntryPoint, &retCode, sizeof(retCode), &out);
-        DEBUGPRINT("Wrote to process memory. Output: %d", out);
+        DEBUGPRINT("Wrote to process memory. Output: %d\n", out);
     }
 
     return DEBUG_STATUS_NO_CHANGE;
@@ -172,7 +173,7 @@ HRESULT CALLBACK fail(PDEBUG_CLIENT4 pClient, PCSTR args)
     else if (*args) {
         block = true;
         driverToFail = args;
-        OutputDml(&ctx, "Will prevent driver %s from loading \n", driverToFail);
+        OutputDml(&ctx, "Will prevent driver %s from loading \n", driverToFail.c_str());
     }
     
     
